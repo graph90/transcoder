@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transcoder — Text &amp; Data Format Converter</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  ul { list-style: none; margin: 0; padding: 0; }
+  button { font-family: inherit; }
+  textarea, input, select { font-family: inherit; color: inherit; }
+  :root {
+    --bg-primary: #090c12;
+    --bg-secondary: #0d1119;
+    --glass-bg: rgba(255, 255, 255, 0.045);
+    --glass-bg-strong: rgba(255, 255, 255, 0.07);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --glass-border-strong: rgba(255, 255, 255, 0.16);
+
+    --accent: #22d3ee;      /* cyan */
+    --accent-2: #3b82f6;    /* blue */
+    --accent-gradient: linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%);
+    --accent-soft: rgba(34, 211, 238, 0.12);
+    --accent-ring: rgba(34, 211, 238, 0.35);
+
+    --text-primary: #e7edf5;
+    --text-secondary: #97a3b4;
+    --text-muted: #5c6675;
+
+    --success: #34d399;
+    --success-soft: rgba(52, 211, 153, 0.12);
+    --error: #f87171;
+    --error-soft: rgba(248, 113, 113, 0.12);
+    --warning: #fbbf24;
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+
+    --shadow-soft: 0 10px 40px rgba(0, 0, 0, 0.45);
+    --shadow-lift: 0 16px 50px rgba(0, 0, 0, 0.55);
+
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", "Consolas", "Menlo", monospace;
+
+    --ease: cubic-bezier(.4, 0, .2, 1);
+    --t-fast: 140ms;
+    --t-med: 240ms;
+  }
+  body::before, body::after {
+    content: "";
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(90px);
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.35;
+  }
+  body::before {
+    width: 520px; height: 520px;
+    top: -180px; left: -140px;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  }
+  body::after {
+    width: 480px; height: 480px;
+    bottom: -200px; right: -120px;
+    background: radial-gradient(circle, var(--accent-2) 0%, transparent 70%);
+  }
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+  }
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 24px clamp(16px, 4vw, 40px) 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-height: 100vh;
+  }
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 26px;
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    background: var(--accent-gradient);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800;
+    font-size: 17px;
+    color: #06131a;
+    box-shadow: 0 6px 20px rgba(34, 211, 238, 0.35);
+    flex-shrink: 0;
+  }
+  .brand-text h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .brand-text p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .header-badge {
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 1px solid var(--glass-border-strong);
+    background: var(--glass-bg-strong);
+    padding: 7px 14px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: blink 2.4s ease-in-out infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .layout {
+    display: grid;
+    grid-template-columns: 208px minmax(0, 1fr) 300px;
+    grid-template-areas: "nav workspace history";
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 1180px) {
+    .layout {
+      grid-template-columns: 1fr;
+      grid-template-areas: "nav" "workspace" "history";
+    }
+  }
+  .category-nav {
+    grid-area: nav;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 20px;
+  }
+  @media (max-width: 1180px) {
+    .category-nav {
+      position: static;
+      flex-direction: row;
+      overflow-x: auto;
+      gap: 8px;
+      padding: 12px;
+      scrollbar-width: thin;
+    }
+  }
+  .category-nav h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 4px 8px 8px;
+    font-weight: 700;
+  }
+  @media (max-width: 1180px) { .category-nav h2 { display: none; } }
+  .cat-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .cat-btn:hover { background: var(--glass-bg-strong); color: var(--text-primary); }
+  .cat-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(34, 211, 238, 0.3);
+    font-weight: 700;
+  }
+  .cat-btn .cat-icon {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    background: var(--glass-bg-strong);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .cat-btn.active .cat-icon { background: var(--accent-gradient); color: #06131a; }
+  .workspace { grid-area: workspace; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .panel-title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0 4px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .panel-title-row h2 { font-size: 16px; margin: 0; font-weight: 700; }
+  .panel-title-row p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+  .ops-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px;
+  }
+  .op-btn {
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border-strong);
+    background: var(--glass-bg-strong);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  }
+  .op-btn:hover { transform: translateY(-1px); border-color: var(--accent-ring); box-shadow: 0 6px 18px rgba(34, 211, 238, 0.12); }
+  .op-btn:active { transform: translateY(0); }
+  .op-btn.last-used { background: var(--accent-gradient); color: #06131a; border-color: transparent; }
+  .io-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 14px;
+    align-items: stretch;
+  }
+  @media (max-width: 860px) {
+    .io-grid { grid-template-columns: 1fr; }
+    .io-divider { flex-direction: row; padding: 4px 0; }
+    .io-divider .divider-btn svg { transform: rotate(90deg); }
+  }
+  .io-card {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+  .io-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .io-card-head label {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+  }
+  .io-status {
+    font-size: 11.5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--glass-bg-strong);
+    color: var(--text-muted);
+  }
+  .io-status.status-error { background: var(--error-soft); color: var(--error); }
+  .io-status.status-success { background: var(--success-soft); color: var(--success); }
+  textarea.io-textarea {
+    width: 100%;
+    min-height: 230px;
+    resize: vertical;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.55;
+    outline: none;
+    transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  }
+  textarea.io-textarea::placeholder { color: var(--text-muted); }
+  textarea.io-textarea:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+  textarea.io-textarea[readonly] { background: rgba(0, 0, 0, 0.22); }
+  textarea.io-textarea.error-state { border-color: rgba(248, 113, 113, 0.5); color: #ffb4b4; }
+  .io-card-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .char-counter { font-size: 12px; color: var(--text-muted); }
+  .io-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--glass-border-strong);
+    background: var(--glass-bg-strong);
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  }
+  .btn:hover { background: rgba(255, 255, 255, 0.11); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-accent { background: var(--accent-gradient); color: #06131a; border-color: transparent; }
+  .btn-accent:hover { filter: brightness(1.08); }
+  .btn-icon { padding: 7px 10px; }
+  .io-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .divider-btn {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border-strong);
+    color: var(--accent);
+    cursor: pointer;
+    transition: transform var(--t-fast) var(--ease), box-shadow var(--t-med) var(--ease), border-color var(--t-med) var(--ease);
+  }
+  .divider-btn:hover { transform: scale(1.06); }
+  .divider-btn svg { width: 20px; height: 20px; transition: transform var(--t-med) var(--ease); }
+  .divider-btn.pulse {
+    animation: pulse-glow 650ms var(--ease);
+    border-color: var(--accent);
+  }
+  @keyframes pulse-glow {
+    0% { box-shadow: 0 0 0 0 var(--accent-ring); }
+    60% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+  }
+  .special-panel { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+  .baseconv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 640px) { .baseconv-grid { grid-template-columns: 1fr; } }
+  .base-field { display: flex; flex-direction: column; gap: 6px; }
+  .base-field label { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+  .base-field input {
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    outline: none;
+    transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  }
+  .base-field input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+  .base-field .field-error { font-size: 11.5px; color: var(--error); min-height: 14px; }
+  .autodetect-result {
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--glass-border);
+    font-size: 14px;
+    color: var(--text-secondary);
+    min-height: 24px;
+  }
+  .autodetect-result .format-name { color: var(--accent); font-weight: 700; }
+  .utility-bar { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .history-panel {
+    grid-area: history;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 82vh;
+    position: sticky;
+    top: 20px;
+  }
+  @media (max-width: 1180px) { .history-panel { position: static; max-height: none; } }
+
+  .history-head { display: flex; align-items: center; justify-content: space-between; }
+  .history-head h2 { font-size: 15px; margin: 0; font-weight: 700; }
+  .history-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 2px; }
+  .history-empty { font-size: 13px; color: var(--text-muted); padding: 24px 8px; text-align: center; }
+
+  .history-item {
+    position: relative;
+    padding: 10px 34px 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    cursor: pointer;
+    transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+  }
+  .history-item:hover { border-color: var(--accent-ring); background: rgba(34, 211, 238, 0.07); }
+  .history-item.current { border-color: var(--accent); background: var(--accent-soft); }
+  .history-item .h-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+  .history-item .h-type { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .history-item .h-time { font-size: 10.5px; color: var(--text-muted); flex-shrink: 0; }
+  .history-item .h-preview {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .history-item .h-delete {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  }
+  .history-item .h-delete:hover { background: var(--error-soft); color: var(--error); }
+  .site-footer {
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    padding: 18px 10px 4px;
+  }
+  .site-footer a { color: var(--text-secondary); }
+  .toast-stack {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 11px 20px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    background: rgba(20, 24, 32, 0.95);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: var(--shadow-lift);
+    animation: toast-in 220ms var(--ease);
+    color: var(--text-primary);
+  }
+  .toast.toast-error { border-color: rgba(248, 113, 113, 0.4); color: #ffb4b4; }
+  .toast.toast-success { border-color: rgba(52, 211, 153, 0.4); color: #a7f3d4; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .toast.leaving { animation: toast-out 200ms var(--ease) forwards; }
+  @keyframes toast-out { to { opacity: 0; transform: translateY(6px); } }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="site-header glass">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">⇄</div>
+      <div class="brand-text">
+        <h1>Transcoder</h1>
+        <p>Encode, decode, and convert text &amp; data formats — entirely offline</p>
+      </div>
+    </div>
+    <div class="header-badge"><span class="dot" aria-hidden="true"></span> Runs 100% in your browser · no data leaves this page</div>
+  </header>
+  <main class="layout">
+    <nav class="category-nav glass" aria-label="Conversion categories" id="categoryNav">
+      <h2>Categories</h2>
+    </nav>
+    <section class="workspace">
+      <div class="panel-title-row">
+        <div>
+          <h2 id="categoryTitle">Text</h2>
+          <p id="categoryDesc">Basic text transformations</p>
+        </div>
+      </div>
+      <div class="ops-bar glass" id="opsBar" role="group" aria-label="Conversion operations"></div>
+      <div class="special-panel glass" id="specialPanel" hidden>
+        <div id="baseconvPanel" hidden>
+          <p style="margin:0 0 4px;color:var(--text-secondary);font-size:13px;">Type a number in any field — the others update instantly. Supports large integers.</p>
+          <div class="baseconv-grid">
+            <div class="base-field">
+              <label for="baseBin">Binary</label>
+              <input type="text" id="baseBin" data-base="2" inputmode="numeric" placeholder="e.g. 11111111" autocomplete="off">
+              <div class="field-error" id="baseBinErr"></div>
+            </div>
+            <div class="base-field">
+              <label for="baseOct">Octal</label>
+              <input type="text" id="baseOct" data-base="8" inputmode="numeric" placeholder="e.g. 377" autocomplete="off">
+              <div class="field-error" id="baseOctErr"></div>
+            </div>
+            <div class="base-field">
+              <label for="baseDec">Decimal</label>
+              <input type="text" id="baseDec" data-base="10" inputmode="numeric" placeholder="e.g. 255" autocomplete="off">
+              <div class="field-error" id="baseDecErr"></div>
+            </div>
+            <div class="base-field">
+              <label for="baseHex">Hexadecimal</label>
+              <input type="text" id="baseHex" data-base="16" placeholder="e.g. FF" autocomplete="off">
+              <div class="field-error" id="baseHexErr"></div>
+            </div>
+          </div>
+        </div>
+        <div id="autodetectPanel" hidden>
+          <p style="margin:0 0 4px;color:var(--text-secondary);font-size:13px;">Analyze the text in the Input box below and guess its format.</p>
+          <button class="btn btn-accent" id="detectBtn" type="button">Detect Format</button>
+          <div class="autodetect-result" id="autodetectResult" aria-live="polite">Nothing analyzed yet — enter text in the Input box and click “Detect Format”.</div>
+        </div>
+      </div>
+      <div class="io-grid">
+        <div class="io-card glass">
+          <div class="io-card-head">
+            <label for="inputText">Input</label>
+          </div>
+          <textarea id="inputText" class="io-textarea" placeholder="Type or paste text here…" aria-label="Conversion input" spellcheck="false"></textarea>
+          <div class="io-card-foot">
+            <span class="char-counter" id="inputCounter">0 characters · 0 bytes</span>
+            <div class="io-btn-row">
+              <button class="btn" id="btnPaste" type="button" title="Paste from clipboard">⤒ Paste</button>
+              <button class="btn" id="btnClearInput" type="button" title="Clear input">✕ Clear</button>
+              <button class="btn" id="btnSwapCard" type="button" title="Swap input and output">⇄ Swap</button>
+            </div>
+          </div>
+        </div>
+        <div class="io-divider">
+          <button class="divider-btn" id="divBtn" type="button" title="Swap input and output" aria-label="Swap input and output">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4M7 4L3 8M7 4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+          </button>
+        </div>
+        <div class="io-card glass">
+          <div class="io-card-head">
+            <label for="outputText">Output</label>
+            <span class="io-status" id="outputStatus">Ready</span>
+          </div>
+          <textarea id="outputText" class="io-textarea" placeholder="Your converted result will appear here…" aria-label="Conversion output" readonly spellcheck="false"></textarea>
+          <div class="io-card-foot">
+            <span class="char-counter" id="outputCounter">0 characters · 0 bytes</span>
+            <div class="io-btn-row">
+              <button class="btn" id="btnCopyOutput" type="button" title="Copy output">⧉ Copy</button>
+              <button class="btn" id="btnDownload" type="button" title="Download output as .txt">⬇ Download TXT</button>
+              <button class="btn" id="btnClearOutput" type="button" title="Clear output">✕ Clear Output</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="utility-bar glass" role="group" aria-label="Utilities">
+        <button class="btn" id="uCopyOutput" type="button">⧉ Copy Output</button>
+        <button class="btn" id="uCopyInput" type="button">⧉ Copy Input</button>
+        <button class="btn" id="uSwap" type="button">⇄ Swap</button>
+        <button class="btn" id="uUndo" type="button">↺ Undo</button>
+        <button class="btn" id="uRedo" type="button">↻ Redo</button>
+        <button class="btn" id="uDownload" type="button">⬇ Download Output</button>
+        <button class="btn" id="uClearAll" type="button" style="margin-left:auto;">✕ Clear All</button>
+      </div>
+    </section>
+    <aside class="history-panel glass" aria-label="Conversion history">
+      <div class="history-head">
+        <h2>History</h2>
+        <button class="btn btn-icon" id="btnClearHistory" type="button" title="Clear all history">Clear</button>
+      </div>
+      <ul class="history-list" id="historyList">
+        <li class="history-empty">No conversions yet this session. Run a conversion to see it appear here.</li>
+      </ul>
+    </aside>
+  </main>
+  <footer class="site-footer">
+    Transcoder — a self-contained, offline text &amp; data conversion toolkit. No external requests, no tracking, nothing stored on any server.
+  </footer>
+</div>
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+<script>
+'use strict';
+class ConversionError extends Error {}
+const encodeUtf8Bytes = (str) => new TextEncoder().encode(str);
+const decodeUtf8Bytes = (bytes) => {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (e) {
+    throw new ConversionError('The decoded bytes are not valid UTF-8 text.');
+  }
+};
+function formatJsonError(err, input) {
+  const match = /position (\d+)/.exec(err.message);
+  if (match) {
+    const pos = parseInt(match[1], 10);
+    const before = input.slice(0, pos);
+    const line = before.split('\n').length;
+    const col = pos - before.lastIndexOf('\n');
+    return `${err.message} (line ${line}, column ${col})`;
+  }
+  return err.message;
+}
+const MORSE_MAP = {
+  A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.',
+  H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--', N: '-.',
+  O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-',
+  V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..',
+  '0': '-----', '1': '.----', '2': '..---', '3': '...--', '4': '....-',
+  '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.',
+  '.': '.-.-.-', ',': '--..--', '?': '..--..', "'": '.----.', '!': '-.-.--',
+  '/': '-..-.', '(': '-.--.', ')': '-.--.-', '&': '.-...', ':': '---...',
+  ';': '-.-.-.', '=': '-...-', '+': '.-.-.', '-': '-....-', '_': '..--.-',
+  '"': '.-..-.', '$': '...-..-', '@': '.--.-.'
+};
+const MORSE_MAP_REV = Object.fromEntries(Object.entries(MORSE_MAP).map(([k, v]) => [v, k]));
+const Converters = {
+  identity: (s) => s,
+  toUpper: (s) => s.toUpperCase(),
+  toLower: (s) => s.toLowerCase(),
+  toTitle: (s) => s.replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()),
+  toSentence: (s) => {
+    const lower = s.toLowerCase();
+    return lower.replace(/(^\s*[a-z])|([.!?]\s*[a-z])/g, (m) => m.toUpperCase());
+  },
+  reverseText: (s) => Array.from(s).reverse().join(''),
+  base64Encode: (s) => {
+    const bytes = encodeUtf8Bytes(s);
+    let binary = '';
+    bytes.forEach((b) => { binary += String.fromCharCode(b); });
+    return btoa(binary);
+  },
+  base64Decode: (s) => {
+    const cleaned = s.trim().replace(/\s+/g, '');
+    if (!cleaned) throw new ConversionError('Input is empty.');
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleaned)) {
+      throw new ConversionError('Invalid Base64 — it contains characters outside A–Z, a–z, 0–9, "+", "/", "=".');
+    }
+    let binary;
+    try {
+      binary = atob(cleaned);
+    } catch (e) {
+      throw new ConversionError('Invalid Base64 input — check for missing characters or incorrect padding.');
+    }
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    return decodeUtf8Bytes(bytes);
+  },
+  urlEncode: (s) => encodeURIComponent(s),
+  urlDecode: (s) => {
+    try {
+      return decodeURIComponent(s.replace(/\+/g, '%20'));
+    } catch (e) {
+      throw new ConversionError('Invalid URL-encoded input — malformed % escape sequence.');
+    }
+  },
+  htmlEncode: (s) => s.replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c])),
+  htmlDecode: (s) => {
+    const ta = document.createElement('textarea');
+    ta.innerHTML = s;
+    return ta.value;
+  },
+  jsonPretty: (s) => {
+    try { return JSON.stringify(JSON.parse(s), null, 2); }
+    catch (e) { throw new ConversionError('Invalid JSON — ' + formatJsonError(e, s)); }
+  },
+  jsonMinify: (s) => {
+    try { return JSON.stringify(JSON.parse(s)); }
+    catch (e) { throw new ConversionError('Invalid JSON — ' + formatJsonError(e, s)); }
+  },
+  jsonValidate: (s) => {
+    try {
+      const v = JSON.parse(s);
+      const type = Array.isArray(v) ? 'array' : v === null ? 'null' : typeof v;
+      return `✓ Valid JSON (top-level type: ${type})`;
+    } catch (e) {
+      throw new ConversionError('✗ Invalid JSON — ' + formatJsonError(e, s));
+    }
+  },
+  textToBinary: (s) => {
+    if (!s) throw new ConversionError('Input is empty.');
+    return Array.from(encodeUtf8Bytes(s)).map((b) => b.toString(2).padStart(8, '0')).join(' ');
+  },
+  binaryToText: (s) => {
+    const cleaned = s.trim();
+    if (!cleaned) throw new ConversionError('Input is empty.');
+    let groups;
+    if (/\s/.test(cleaned)) {
+      groups = cleaned.split(/\s+/);
+    } else {
+      if (cleaned.length % 8 !== 0) {
+        throw new ConversionError('Binary input contains invalid characters, or its length is not a multiple of 8 (with no spaces).');
+      }
+      groups = cleaned.match(/.{8}/g);
+    }
+    const bytes = groups.map((g) => {
+      if (!/^[01]{1,8}$/.test(g)) throw new ConversionError(`Binary input contains invalid characters: "${g}"`);
+      return parseInt(g, 2);
+    });
+    return decodeUtf8Bytes(Uint8Array.from(bytes));
+  },
+  textToHex: (s) => {
+    if (!s) throw new ConversionError('Input is empty.');
+    return Array.from(encodeUtf8Bytes(s)).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  },
+  hexToText: (s) => {
+    const cleaned = s.trim().replace(/0x/gi, '').replace(/\s+/g, '');
+    if (!cleaned) throw new ConversionError('Input is empty.');
+    if (!/^[0-9a-fA-F]+$/.test(cleaned)) throw new ConversionError('Hex input contains characters outside 0–9 and a–f.');
+    if (cleaned.length % 2 !== 0) throw new ConversionError('Hex input must have an even number of digits.');
+    const bytes = cleaned.match(/.{2}/g).map((h) => parseInt(h, 16));
+    return decodeUtf8Bytes(Uint8Array.from(bytes));
+  },
+  textToDecimal: (s) => {
+    if (!s) throw new ConversionError('Input is empty.');
+    return Array.from(encodeUtf8Bytes(s)).join(' ');
+  },
+  decimalToText: (s) => {
+    const cleaned = s.trim();
+    if (!cleaned) throw new ConversionError('Input is empty.');
+    const parts = cleaned.split(/[\s,]+/).filter(Boolean);
+    const bytes = parts.map((p) => {
+      if (!/^\d+$/.test(p)) throw new ConversionError(`Invalid decimal value: "${p}"`);
+      const n = parseInt(p, 10);
+      if (n < 0 || n > 255) throw new ConversionError(`Decimal value out of byte range 0–255: ${n}`);
+      return n;
+    });
+    return decodeUtf8Bytes(Uint8Array.from(bytes));
+  },
+  textToUnicode: (s) => {
+    if (!s) throw new ConversionError('Input is empty.');
+    let out = '';
+    for (let i = 0; i < s.length; i++) out += '\\u' + s.charCodeAt(i).toString(16).padStart(4, '0');
+    return out;
+  },
+  unicodeToText: (s) => {
+    if (!/\\u[0-9a-fA-F]{4}/.test(s)) throw new ConversionError('No valid \\uXXXX escape sequences were found.');
+    return s.replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+  },
+  rot13: (s) => {
+    if (!s) throw new ConversionError('Input is empty.');
+    return s.replace(/[a-zA-Z]/g, (c) => {
+      const base = c <= 'Z' ? 65 : 97;
+      return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
+    });
+  },
+  textToMorse: (s) => {
+    if (!s.trim()) throw new ConversionError('Input is empty.');
+    const words = s.trim().split(/\s+/);
+    const encodedWords = words.map((word) => {
+      const letters = Array.from(word.toUpperCase()).map((ch) => {
+        const code = MORSE_MAP[ch];
+        if (!code) throw new ConversionError(`Character not supported in Morse code: "${ch}"`);
+        return code;
+      });
+      return letters.join(' ');
+    });
+    return encodedWords.join(' / ');
+  },
+  morseToText: (s) => {
+    const cleaned = s.trim();
+    if (!cleaned) throw new ConversionError('Input is empty.');
+    const words = cleaned.split('/');
+    const decodedWords = words.map((word) => {
+      const tokens = word.trim().split(/\s+/).filter(Boolean);
+      return tokens.map((tok) => {
+        const ch = MORSE_MAP_REV[tok];
+        if (!ch) throw new ConversionError(`Unrecognized Morse sequence: "${tok}"`);
+        return ch;
+      }).join('');
+    });
+    return decodedWords.join(' ');
+  }
+};
+function parseBigIntFromBase(rawStr, base) {
+  const validChars = '0123456789abcdefghijklmnopqrstuvwxyz'.slice(0, base);
+  let s = rawStr.trim().toLowerCase();
+  if (!s) return null;
+  let negative = false;
+  if (s[0] === '-') { negative = true; s = s.slice(1); }
+  if (!s.length || ![...s].every((ch) => validChars.includes(ch))) {
+    throw new ConversionError(`"${rawStr}" contains digits invalid for base ${base}.`);
+  }
+  let result = 0n;
+  const b = BigInt(base);
+  for (const ch of s) result = result * b + BigInt(validChars.indexOf(ch));
+  return negative ? -result : result;
+}
+async function computeHash(algo, str) {
+  if (!window.crypto || !window.crypto.subtle) {
+    throw new ConversionError('The Web Crypto API is unavailable in this context (try opening this file over http://localhost or https://).');
+  }
+  const data = encodeUtf8Bytes(str);
+  const buffer = await window.crypto.subtle.digest(algo, data);
+  return Array.from(new Uint8Array(buffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const MD5_NOTICE = 'MD5 cannot be computed here: it is not exposed by the browser’s Web Crypto API, and Transcoder deliberately avoids shipping a hand-rolled/fake MD5 implementation. Please use SHA-256 or another supported algorithm, or a trusted dedicated library if MD5 is specifically required.';
+function detectFormat(input) {
+  const s = input.trim();
+  if (!s) return { label: 'Nothing to analyze', detail: 'The input box is empty.' };
+  try {
+    JSON.parse(s);
+    return { label: 'JSON', detail: 'The input parses as valid JSON.' };
+  } catch (e) { /* not JSON, continue */ }
+  const noSpaceBin = s.replace(/\s+/g, '');
+  if (/^[01\s]+$/.test(s) && noSpaceBin.length > 0 && noSpaceBin.length % 8 === 0) {
+    return { label: 'Binary', detail: `Looks like binary — ${noSpaceBin.length / 8} byte(s) once spaces are removed.` };
+  }
+  const noSpaceHex = s.replace(/\s+/g, '').replace(/^0x/i, '');
+  if (/^[0-9a-fA-F]+$/.test(noSpaceHex) && noSpaceHex.length % 2 === 0 && noSpaceHex.length >= 2) {
+    return { label: 'Hexadecimal', detail: `Looks like hex — ${noSpaceHex.length / 2} byte(s) once spaces are removed.` };
+  }
+  const noSpaceB64 = s.replace(/\s+/g, '');
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(noSpaceB64) && noSpaceB64.length % 4 === 0 && noSpaceB64.length >= 4) {
+    try { atob(noSpaceB64); return { label: 'Base64', detail: 'The input matches the Base64 alphabet and decodes without error.' }; }
+    catch (e) { /* fall through */ }
+  }
+  if (/%[0-9A-Fa-f]{2}/.test(s)) {
+    try {
+      const decoded = decodeURIComponent(s);
+      if (decoded !== s) return { label: 'URL Encoded', detail: 'Contains %XX escape sequences that decode successfully.' };
+    } catch (e) { /* fall through */ }
+  }
+  if (/&[a-zA-Z]+;|&#\d+;|&#x[0-9a-fA-F]+;/.test(s)) {
+    return { label: 'HTML Encoded', detail: 'Contains HTML character entities (e.g. &amp;, &#39;).' };
+  }
+  return { label: 'Plain Text', detail: 'No specific encoding pattern was detected — this looks like ordinary text.' };
+}
+const CATEGORIES = [
+  { id: 'text', label: 'Text', icon: 'Aa', desc: 'Basic text transformations', ops: [
+    { id: 'plain', label: 'Plain Text', fn: Converters.identity },
+    { id: 'upper', label: 'UPPERCASE', fn: Converters.toUpper },
+    { id: 'lower', label: 'lowercase', fn: Converters.toLower },
+    { id: 'title', label: 'Title Case', fn: Converters.toTitle },
+    { id: 'sentence', label: 'Sentence case', fn: Converters.toSentence },
+    { id: 'reverse', label: 'Reverse Text', fn: Converters.reverseText }
+  ]},
+  { id: 'base64', label: 'Base64', icon: '64', desc: 'Encode/decode Base64, UTF-8 safe', ops: [
+    { id: 'b64enc', label: 'Encode Base64', fn: Converters.base64Encode },
+    { id: 'b64dec', label: 'Decode Base64', fn: Converters.base64Decode }
+  ]},
+  { id: 'url', label: 'URL', icon: '%', desc: 'Percent-encode / decode URL components', ops: [
+    { id: 'urlenc', label: 'URL Encode', fn: Converters.urlEncode },
+    { id: 'urldec', label: 'URL Decode', fn: Converters.urlDecode }
+  ]},
+  { id: 'html', label: 'HTML', icon: '<>', desc: 'Escape / unescape HTML entities', ops: [
+    { id: 'htmlenc', label: 'HTML Encode', fn: Converters.htmlEncode },
+    { id: 'htmldec', label: 'HTML Decode', fn: Converters.htmlDecode }
+  ]},
+  { id: 'json', label: 'JSON', icon: '{}', desc: 'Pretty-print, minify, or validate JSON', ops: [
+    { id: 'jsonpretty', label: 'Pretty Print JSON', fn: Converters.jsonPretty },
+    { id: 'jsonmin', label: 'Minify JSON', fn: Converters.jsonMinify },
+    { id: 'jsonvalid', label: 'Validate JSON', fn: Converters.jsonValidate }
+  ]},
+  { id: 'binary', label: 'Binary', icon: '01', desc: 'Convert text to/from 8-bit binary bytes', ops: [
+    { id: 't2b', label: 'Text → Binary', fn: Converters.textToBinary },
+    { id: 'b2t', label: 'Binary → Text', fn: Converters.binaryToText }
+  ]},
+  { id: 'hex', label: 'Hex', icon: '#F', desc: 'Convert text to/from hexadecimal bytes', ops: [
+    { id: 't2h', label: 'Text → Hex', fn: Converters.textToHex },
+    { id: 'h2t', label: 'Hex → Text', fn: Converters.hexToText }
+  ]},
+  { id: 'decimal', label: 'Decimal', icon: '10', desc: 'Convert text to/from ASCII decimal byte values', ops: [
+    { id: 't2d', label: 'Text → ASCII Decimal', fn: Converters.textToDecimal },
+    { id: 'd2t', label: 'ASCII Decimal → Text', fn: Converters.decimalToText }
+  ]},
+  { id: 'unicode', label: 'Unicode', icon: 'U+', desc: 'Convert text to/from \\uXXXX escape sequences', ops: [
+    { id: 't2u', label: 'Text → Unicode Escape', fn: Converters.textToUnicode },
+    { id: 'u2t', label: 'Unicode Escape → Text', fn: Converters.unicodeToText }
+  ]},
+  { id: 'rot13', label: 'ROT13', icon: '13', desc: 'Rotate letters by 13 (self-inverse cipher)', ops: [
+    { id: 'rot13', label: 'ROT13 Encode / Decode', fn: Converters.rot13 }
+  ]},
+  { id: 'morse', label: 'Morse Code', icon: '·−', desc: 'Convert text to/from Morse code', ops: [
+    { id: 't2m', label: 'Text → Morse', fn: Converters.textToMorse },
+    { id: 'm2t', label: 'Morse → Text', fn: Converters.morseToText }
+  ]},
+  { id: 'hash', label: 'Hashing', icon: '#', desc: 'Generate cryptographic hashes via Web Crypto', async: true, ops: [
+    { id: 'md5', label: 'MD5', algo: 'md5' },
+    { id: 'sha1', label: 'SHA-1', algo: 'SHA-1' },
+    { id: 'sha256', label: 'SHA-256', algo: 'SHA-256' },
+    { id: 'sha384', label: 'SHA-384', algo: 'SHA-384' },
+    { id: 'sha512', label: 'SHA-512', algo: 'SHA-512' }
+  ]},
+  { id: 'baseconv', label: 'Base Conversion', icon: 'n', desc: 'Convert a number between binary, octal, decimal, hex', special: 'baseconv' },
+  { id: 'autodetect', label: 'Auto Detect', icon: '?', desc: 'Guess the encoding of the input text', special: 'autodetect' }
+];
+class HistoryStore {
+  constructor() {
+    this.entries = [];
+    this.pointer = -1;
+  }
+  add(entry) {
+    this.entries = this.entries.slice(0, this.pointer + 1);
+    this.entries.push(entry);
+    this.pointer = this.entries.length - 1;
+    return entry;
+  }
+  undo() {
+    if (this.pointer <= 0) return null;
+    this.pointer -= 1;
+    return this.entries[this.pointer];
+  }
+  redo() {
+    if (this.pointer >= this.entries.length - 1) return null;
+    this.pointer += 1;
+    return this.entries[this.pointer];
+  }
+  restoreTo(id) {
+    const idx = this.entries.findIndex((e) => e.id === id);
+    if (idx === -1) return null;
+    this.pointer = idx;
+    return this.entries[idx];
+  }
+  remove(id) {
+    const idx = this.entries.findIndex((e) => e.id === id);
+    if (idx === -1) return;
+    this.entries.splice(idx, 1);
+    if (this.pointer >= this.entries.length) this.pointer = this.entries.length - 1;
+    else if (idx < this.pointer) this.pointer -= 1;
+  }
+  clear() { this.entries = []; this.pointer = -1; }
+}
+class App {
+  constructor() {
+    this.history = new HistoryStore();
+    this.activeCategoryId = 'text';
+    this.cacheDom();
+    this.renderCategoryNav();
+    this.renderOpsBar();
+    this.bindEvents();
+    this.updateCounters();
+    this.renderHistory();
+  }
+  cacheDom() {
+    this.$ = (id) => document.getElementById(id);
+    this.categoryNav = this.$('categoryNav');
+    this.categoryTitle = this.$('categoryTitle');
+    this.categoryDesc = this.$('categoryDesc');
+    this.opsBar = this.$('opsBar');
+    this.specialPanel = this.$('specialPanel');
+    this.baseconvPanel = this.$('baseconvPanel');
+    this.autodetectPanel = this.$('autodetectPanel');
+    this.inputText = this.$('inputText');
+    this.outputText = this.$('outputText');
+    this.inputCounter = this.$('inputCounter');
+    this.outputCounter = this.$('outputCounter');
+    this.outputStatus = this.$('outputStatus');
+    this.historyList = this.$('historyList');
+    this.toastStack = this.$('toastStack');
+    this.divBtn = this.$('divBtn');
+  }
+  renderCategoryNav() {
+    CATEGORIES.forEach((cat) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cat-btn' + (cat.id === this.activeCategoryId ? ' active' : '');
+      btn.dataset.cat = cat.id;
+      btn.setAttribute('aria-pressed', cat.id === this.activeCategoryId ? 'true' : 'false');
+      btn.innerHTML = `<span class="cat-icon" aria-hidden="true">${cat.icon}</span><span>${cat.label}</span>`;
+      btn.addEventListener('click', () => this.setCategory(cat.id));
+      this.categoryNav.appendChild(btn);
+    });
+  }
+  setCategory(catId) {
+    this.activeCategoryId = catId;
+    this.categoryNav.querySelectorAll('.cat-btn').forEach((b) => {
+      const active = b.dataset.cat === catId;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    const cat = CATEGORIES.find((c) => c.id === catId);
+    this.categoryTitle.textContent = cat.label;
+    this.categoryDesc.textContent = cat.desc;
+    this.renderOpsBar();
+  }
+  renderOpsBar() {
+    const cat = CATEGORIES.find((c) => c.id === this.activeCategoryId);
+    this.opsBar.innerHTML = '';
+
+    if (cat.special) {
+      this.opsBar.hidden = true;
+      this.specialPanel.hidden = false;
+      this.baseconvPanel.hidden = cat.special !== 'baseconv';
+      this.autodetectPanel.hidden = cat.special !== 'autodetect';
+      return;
+    }
+    this.opsBar.hidden = false;
+    this.specialPanel.hidden = true;
+    cat.ops.forEach((op) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'op-btn';
+      btn.textContent = op.label;
+      btn.addEventListener('click', () => {
+        if (cat.async) this.runHashOperation(op);
+        else this.runOperation(op);
+      });
+      this.opsBar.appendChild(btn);
+    });
+  }
+  runOperation(op) {
+    const input = this.inputText.value;
+    try {
+      const result = op.fn(input);
+      this.setOutput(result, false);
+      this.logHistory(op.label, input, result);
+      this.pulseDivider();
+      this.toast(`${op.label} complete`, 'success');
+    } catch (err) {
+      const msg = err instanceof ConversionError ? err.message : 'Something went wrong: ' + err.message;
+      this.setOutput('⚠ ' + msg, true);
+      this.toast(msg, 'error');
+    }
+  }
+  async runHashOperation(op) {
+    const input = this.inputText.value;
+    if (!input) {
+      this.setOutput('⚠ Input is empty.', true);
+      this.toast('Input is empty.', 'error');
+      return;
+    }
+    if (op.algo === 'md5') {
+      this.setOutput('ℹ ' + MD5_NOTICE, true);
+      this.toast('MD5 is intentionally not implemented — see output for details.', 'error');
+      return;
+    }
+    try {
+      this.outputStatus.textContent = 'Hashing…';
+      const digest = await computeHash(op.algo, input);
+      const result = `${op.label}: ${digest}`;
+      this.setOutput(result, false);
+      this.logHistory(op.label, input, result);
+      this.pulseDivider();
+      this.toast(`${op.label} computed`, 'success');
+    } catch (err) {
+      const msg = err instanceof ConversionError ? err.message : 'Hashing failed: ' + err.message;
+      this.setOutput('⚠ ' + msg, true);
+      this.toast(msg, 'error');
+    }
+  }
+  setOutput(text, isError) {
+    this.outputText.value = text;
+    this.outputText.classList.toggle('error-state', !!isError);
+    this.outputStatus.textContent = isError ? 'Error' : 'Ready';
+    this.outputStatus.classList.toggle('status-error', !!isError);
+    this.outputStatus.classList.toggle('status-success', !isError);
+    this.updateCounters();
+  }
+  pulseDivider() {
+    this.divBtn.classList.remove('pulse');
+    void this.divBtn.offsetWidth;
+    this.divBtn.classList.add('pulse');
+  }
+  logHistory(type, input, output) {
+    const entry = {
+      id: 'h' + Date.now() + Math.random().toString(36).slice(2, 7),
+      timestamp: new Date(),
+      type, input, output
+    };
+    this.history.add(entry);
+    this.renderHistory();
+  }
+  renderHistory() {
+    const entries = this.history.entries;
+    this.historyList.innerHTML = '';
+    if (!entries.length) {
+      const li = document.createElement('li');
+      li.className = 'history-empty';
+      li.textContent = 'No conversions yet this session. Run a conversion to see it appear here.';
+      this.historyList.appendChild(li);
+      return;
+    }
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i];
+      const li = document.createElement('li');
+      li.className = 'history-item' + (i === this.history.pointer ? ' current' : '');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      li.setAttribute('aria-label', `Restore conversion: ${entry.type}`);
+      const preview = (entry.output || '').replace(/\s+/g, ' ').slice(0, 60);
+      li.innerHTML = `
+        <div class="h-top">
+          <span class="h-type">${entry.type}</span>
+          <span class="h-time">${entry.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+        </div>
+        <div class="h-preview">${preview ? preview.replace(/</g, '&lt;') : '(empty)'}</div>
+        <button class="h-delete" type="button" title="Delete this entry" aria-label="Delete entry">×</button>
+      `;
+      const restore = () => this.restoreEntry(entry.id);
+      li.addEventListener('click', (e) => {
+        if (e.target.closest('.h-delete')) return;
+        restore();
+      });
+      li.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); restore(); }
+      });
+      li.querySelector('.h-delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.history.remove(entry.id);
+        this.renderHistory();
+        this.toast('History entry deleted', 'success');
+      });
+      this.historyList.appendChild(li);
+    }
+  }
+  restoreEntry(id) {
+    const entry = this.history.restoreTo(id);
+    if (!entry) return;
+    this.inputText.value = entry.input;
+    this.setOutput(entry.output, false);
+    this.renderHistory();
+    this.toast('Restored from history', 'success');
+  }
+  undo() {
+    const entry = this.history.undo();
+    if (!entry) { this.toast('Nothing to undo', 'error'); return; }
+    this.inputText.value = entry.input;
+    this.setOutput(entry.output, false);
+    this.renderHistory();
+    this.toast('Undone', 'success');
+  }
+  redo() {
+    const entry = this.history.redo();
+    if (!entry) { this.toast('Nothing to redo', 'error'); return; }
+    this.inputText.value = entry.input;
+    this.setOutput(entry.output, false);
+    this.renderHistory();
+    this.toast('Redone', 'success');
+  }
+  updateCounters() {
+    const describe = (str) => `${str.length} character${str.length === 1 ? '' : 's'} · ${encodeUtf8Bytes(str).length} byte${encodeUtf8Bytes(str).length === 1 ? '' : 's'}`;
+    this.inputCounter.textContent = describe(this.inputText.value);
+    this.outputCounter.textContent = describe(this.outputText.value);
+  }
+  async copyText(text, label) {
+    if (!text) { this.toast('Nothing to copy', 'error'); return; }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error('no-clipboard-api');
+      }
+      this.toast(`${label} copied to clipboard`, 'success');
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try {
+        document.execCommand('copy');
+        this.toast(`${label} copied to clipboard`, 'success');
+      } catch (e2) {
+        this.toast('Could not access clipboard — copy manually with Ctrl/Cmd+C', 'error');
+      }
+      document.body.removeChild(ta);
+    }
+  }
+  async pasteFromClipboard() {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error('no-clipboard-api');
+      const text = await navigator.clipboard.readText();
+      this.inputText.value = text;
+      this.updateCounters();
+      this.toast('Pasted from clipboard', 'success');
+    } catch (e) {
+      this.toast('Clipboard access not permitted — paste manually with Ctrl/Cmd+V', 'error');
+      this.inputText.focus();
+    }
+  }
+  downloadOutput() {
+    const text = this.outputText.value;
+    if (!text) { this.toast('Nothing to download', 'error'); return; }
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'transcoder-output.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    this.toast('Download started', 'success');
+  }
+  swapInputOutput() {
+    const inVal = this.inputText.value;
+    const outVal = this.outputText.value;
+    this.inputText.value = outVal;
+    this.setOutput(inVal, false);
+    this.toast('Input and output swapped', 'success');
+  }
+  clearInput() { this.inputText.value = ''; this.updateCounters(); this.inputText.focus(); }
+  clearOutput() { this.setOutput('', false); }
+  clearAll() {
+    this.inputText.value = '';
+    this.setOutput('', false);
+    this.toast('Cleared', 'success');
+  }
+  toast(message, kind) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind === 'error' ? ' toast-error' : kind === 'success' ? ' toast-success' : '');
+    el.textContent = message;
+    this.toastStack.appendChild(el);
+    setTimeout(() => {
+      el.classList.add('leaving');
+      setTimeout(() => el.remove(), 220);
+    }, 2400);
+  }
+  bindBaseConversion() {
+    const fields = {
+      2: this.$('baseBin'), 8: this.$('baseOct'), 10: this.$('baseDec'), 16: this.$('baseHex')
+    };
+    const errors = {
+      2: this.$('baseBinErr'), 8: this.$('baseOctErr'), 10: this.$('baseDecErr'), 16: this.$('baseHexErr')
+    };
+    const clearErrors = () => Object.values(errors).forEach((e) => { e.textContent = ''; });
+
+    Object.entries(fields).forEach(([base, input]) => {
+      const b = parseInt(base, 10);
+      input.addEventListener('input', () => {
+        clearErrors();
+        const raw = input.value;
+        if (!raw.trim()) {
+          Object.entries(fields).forEach(([ob, oInput]) => { if (parseInt(ob, 10) !== b) oInput.value = ''; });
+          return;
+        }
+        try {
+          const n = parseBigIntFromBase(raw, b);
+          if (n === null) return;
+          Object.entries(fields).forEach(([ob, oInput]) => {
+            const obn = parseInt(ob, 10);
+            if (obn !== b) oInput.value = n.toString(obn);
+          });
+          this.logHistory(`Base Convert (${b}→all)`, raw, `bin:${fields[2].value} oct:${fields[8].value} dec:${fields[10].value} hex:${fields[16].value}`);
+        } catch (err) {
+          errors[base].textContent = err.message;
+        }
+      });
+    });
+  }
+  bindAutoDetect() {
+    this.$('detectBtn').addEventListener('click', () => {
+      const result = detectFormat(this.inputText.value);
+      const box = this.$('autodetectResult');
+      box.innerHTML = `Detected format: <span class="format-name">${result.label}</span><br>${result.detail}`;
+      this.logHistory('Auto Detect', this.inputText.value, `Detected: ${result.label} — ${result.detail}`);
+      this.toast(`Detected: ${result.label}`, 'success');
+    });
+  }
+  bindEvents() {
+    this.inputText.addEventListener('input', () => this.updateCounters());
+    this.$('btnPaste').addEventListener('click', () => this.pasteFromClipboard());
+    this.$('btnClearInput').addEventListener('click', () => this.clearInput());
+    this.$('btnSwapCard').addEventListener('click', () => this.swapInputOutput());
+    this.$('btnCopyOutput').addEventListener('click', () => this.copyText(this.outputText.value, 'Output'));
+    this.$('btnDownload').addEventListener('click', () => this.downloadOutput());
+    this.$('btnClearOutput').addEventListener('click', () => this.clearOutput());
+    this.divBtn.addEventListener('click', () => this.swapInputOutput());
+    this.$('uCopyOutput').addEventListener('click', () => this.copyText(this.outputText.value, 'Output'));
+    this.$('uCopyInput').addEventListener('click', () => this.copyText(this.inputText.value, 'Input'));
+    this.$('uSwap').addEventListener('click', () => this.swapInputOutput());
+    this.$('uUndo').addEventListener('click', () => this.undo());
+    this.$('uRedo').addEventListener('click', () => this.redo());
+    this.$('uDownload').addEventListener('click', () => this.downloadOutput());
+    this.$('uClearAll').addEventListener('click', () => this.clearAll());
+    this.$('btnClearHistory').addEventListener('click', () => {
+      this.history.clear();
+      this.renderHistory();
+      this.toast('History cleared', 'success');
+    });
+    this.bindBaseConversion();
+    this.bindAutoDetect();
+    document.addEventListener('keydown', (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) { e.preventDefault(); this.undo(); }
+      else if ((key === 'z' && e.shiftKey) || key === 'y') { e.preventDefault(); this.redo(); }
+    });
+  }
+}
+document.addEventListener('DOMContentLoaded', () => { new App(); });
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 A modern, privacy-focused text and data conversion toolkit that runs entirely in your browser.
 
-**🌐 Live Demo:** 
+**🌐 Live Demo:** https://graph90.github.io/pages/transcoder.html
 
 **📦 Repository:** https://github.com/graph90/transcoder
 
@@ -63,7 +63,7 @@ No internet connection required.
 
 ## Live Demo
 
-Visit:
+Visit:https://graph90.github.io/pages/transcoder.html
 
 
 
